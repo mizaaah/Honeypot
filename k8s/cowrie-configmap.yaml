@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cowrie-userdb
+data:
+  userdb.txt: |
+    root:x:admin
+    root:x:123456
+    admin:x:admin
+    root:x:*
