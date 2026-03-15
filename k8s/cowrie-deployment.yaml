@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cowrie-deployment
+  labels:
+    app: cowrie
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cowrie
+  template:
+    metadata:
+      labels:
+        app: cowrie
+    spec:
+      containers:
+      - name: cowrie
+        # On met l'image officielle pour l'instant, 
+        # on la changera quand la CI/CD (GitHub Actions) sera faite !
+        image: cowrie/cowrie:latest 
+        ports:
+        - containerPort: 2222
