@@ -16,8 +16,14 @@ spec:
     spec:
       containers:
       - name: cowrie
-        # On met l'image officielle pour l'instant, 
-        # on la changera quand la CI/CD (GitHub Actions) sera faite !
-        image: cowrie/cowrie:latest 
+        image: cowrie/cowrie:latest
         ports:
         - containerPort: 2222
+        volumeMounts:
+        - name: user-db
+          mountPath: /cowrie/cowrie-git/etc/userdb.txt
+          subPath: userdb.txt
+      volumes:
+      - name: user-db
+        configMap:
+          name: cowrie-userdb
