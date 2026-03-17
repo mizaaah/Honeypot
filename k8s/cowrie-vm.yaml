@@ -1,0 +1,67 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: cowrie-vm
+  labels:
+    app: cowrie-vm
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        app: cowrie-vm
+    spec:
+      domain:
+        resources:
+          requests:
+            memory: 1024M 
+        devices:
+          interfaces:
+          - name: default
+            masquerade: {}
+            ports:
+            - port: 2222
+            - port: 22
+          disks:
+          - name: containerdisk
+            disk:
+              bus: virtio
+          - name: cloudinitdisk
+            disk:
+              bus: virtio
+          - name: extra-storage   # <-- Notre nouveau disque
+            disk:
+              bus: virtio
+      networks:
+      - name: default
+        pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/containerdisks/ubuntu:22.04
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              password: admin
+              chpasswd: { expire: False }
+              ssh_pwauth: True
+              runcmd:
+                # 1. On formate le nouveau disque de 5 Go (/dev/vdc)
+                - mkfs.ext4 /dev/vdc
+                - mkdir -p /mnt/storage
+                - mount /dev/vdc /mnt/storage
+                # 2. On déplace le cache de téléchargement vers le grand disque
+                - mv /var/cache/apt /mnt/storage/apt-cache
+                - ln -s /mnt/storage/apt-cache /var/cache/apt
+                # 3. On prépare le grand disque pour recevoir Docker
+                - mkdir -p /mnt/storage/docker
+                - ln -s /mnt/storage/docker /var/lib/docker
+                # 4. Maintenant qu'on a de la place, on installe tout !
+                - apt-get update
+                - apt-get install -y docker.io
+                - systemctl enable --now docker
+                - docker run -d -p 2222:2222 cowrie/cowrie:latest
+        - name: extra-storage    # <-- Création du disque de 5 Go
+          emptyDisk:
+            capacity: 5Gi
