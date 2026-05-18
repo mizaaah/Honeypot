@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cowrie
+  namespace: honeypot
+  labels:
+    app: cowrie
+    tier: honeypot
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cowrie
+  template:
+    metadata:
+      labels:
+        app: cowrie
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: cowrie
+          image: ghcr.io/mizaaah/cowrie:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 2222
+          volumeMounts:
+            - name: cowrie-config
+              mountPath: /home/cowrie/cowrie/etc/cowrie.cfg
+              subPath: cowrie.cfg
+            - name: cowrie-logs
+              mountPath: /home/cowrie/cowrie/var/log/cowrie
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+      volumes:
+        - name: cowrie-config
+          configMap:
+            name: cowrie-config
+        - name: cowrie-logs
+          emptyDir: {}
