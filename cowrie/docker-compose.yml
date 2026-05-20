@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  cowrie:
+    build: .
+    container_name: cowrie
+    ports:
+      - "2222:2222"
+    volumes:
+      - ./cowrie.cfg:/home/cowrie/cowrie.cfg
+      - ./logs:/home/cowrie/var/log/cowrie
+    restart: unless-stopped
