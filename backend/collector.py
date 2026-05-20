@@ -1,24 +1,20 @@
 import time
 import docker
-from elasticsearch import Elasticsearch
+import requests
 
-es = Elasticsearch("http://localhost:9200")
+LOKI_URL = "http://localhost:3100/loki/api/v1/push"
 
 
-def create_index():
-    if not es.indices.exists(index="cowrie-logs"):
-        es.indices.create(
-            index="cowrie-logs",
-            body={
-                "mappings": {
-                    "properties": {
-                        "message": {"type": "text"},
-                        "timestamp": {"type": "float"},
-                    }
-                }
-            },
-        )
-        print("Index cowrie-logs créé")
+def send_to_loki(line):
+    payload = {
+        "streams": [
+            {
+                "stream": {"job": "cowrie", "container": "cowrie2"},
+                "values": [[str(int(time.time() * 1e9)), line]],
+            }
+        ]
+    }
+    requests.post(LOKI_URL, json=payload)
 
 
 def collect_logs():
@@ -28,11 +24,9 @@ def collect_logs():
     for log in container.logs(stream=True, follow=True, tail=10):
         line = log.decode("utf-8").strip()
         if line:
-            doc = {"message": line, "timestamp": time.time()}
-            es.index(index="cowrie-logs", document=doc)
+            send_to_loki(line)
             print(f"Log envoyé: {line[:80]}")
 
 
 if __name__ == "__main__":
-    create_index()
     collect_logs()
