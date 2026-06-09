@@ -16,10 +16,13 @@ spec:
       labels:
         app: cowrie
     spec:
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: cowrie
           image: ghcr.io/mizaaah/cowrie:latest
@@ -32,6 +35,8 @@ spec:
               subPath: cowrie.cfg
             - name: cowrie-logs
               mountPath: /home/cowrie/cowrie/var/log/cowrie
+            - name: cowrie-tmp
+              mountPath: /tmp
           resources:
             requests:
               memory: "128Mi"
@@ -41,6 +46,7 @@ spec:
               cpu: "200m"
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
       volumes:
@@ -49,3 +55,17 @@ spec:
             name: cowrie-config
         - name: cowrie-logs
           emptyDir: {}
+        - name: cowrie-tmp
+          emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - cowrie
+                topologyKey: kubernetes.io/hostname
