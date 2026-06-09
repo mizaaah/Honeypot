@@ -7,8 +7,13 @@ spec:
   type: LoadBalancer
   selector:
     app: cowrie
+  externalTrafficPolicy: Local
   ports:
     - name: ssh-honey
       port: 22
       targetPort: 2222
+      protocol: TCP
+    - name: telnet-honey
+      port: 23
+      targetPort: 2323
       protocol: TCP
