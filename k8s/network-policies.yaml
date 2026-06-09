@@ -1,0 +1,129 @@
+---
+# Politique réseau pour Cowrie : accepte uniquement les connexions externes
+# et autorise les exports de logs vers le collecteur. Bloque tout le reste.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cowrie-isolation
+  namespace: honeypot
+spec:
+  podSelector:
+    matchLabels:
+      app: cowrie
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Autorise les connexions SSH/Telnet depuis l'extérieur (attaquants)
+    - ports:
+        - port: 2222
+          protocol: TCP
+        - port: 2323
+          protocol: TCP
+
+  egress:
+    # Autorise uniquement les exports vers le collecteur Python (backend)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: collector
+      ports:
+        - port: 5000
+          protocol: TCP
+    # Autorise la résolution DNS (nécessaire pour GeoIP)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+---
+# Politique réseau pour le collecteur Python
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: collector-policy
+  namespace: honeypot
+spec:
+  podSelector:
+    matchLabels:
+      app: collector
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Accepte les logs venant de Cowrie
+    - from:
+        - podSelector:
+            matchLabels:
+              app: cowrie
+      ports:
+        - port: 5000
+          protocol: TCP
+    # Accepte les requêtes venant de l'API FastAPI
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api
+      ports:
+        - port: 5000
+          protocol: TCP
+
+  egress:
+    # Export vers Loki / Elasticsearch
+    - to:
+        - podSelector:
+            matchLabels:
+              app: loki
+      ports:
+        - port: 3100
+          protocol: TCP
+    # DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+    # API GeoIP externe
+    - ports:
+        - port: 443
+          protocol: TCP
+
+---
+# Politique réseau pour l'API FastAPI
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-policy
+  namespace: honeypot
+spec:
+  podSelector:
+    matchLabels:
+      app: api
+  policyTypes:
+    - Ingress
+    - Egress
+
+  ingress:
+    # Accès depuis Grafana et l'extérieur (via Ingress)
+    - ports:
+        - port: 8000
+          protocol: TCP
+
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: collector
+      ports:
+        - port: 5000
+          protocol: TCP
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
