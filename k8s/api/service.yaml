@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: honeypot-api
+  namespace: honeypot
+  labels:
+    app: honeypot-api
+    tier: api
+spec:
+  selector:
+    app: honeypot-api
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8000
+  type: ClusterIP
