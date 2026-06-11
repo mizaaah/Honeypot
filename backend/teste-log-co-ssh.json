@@ -1,0 +1,2 @@
+{"eventid": "cowrie.login.failed", "src_ip": "185.220.101.5", "username": "admin", "password": "123"}
+{"eventid": "cowrie.command.input", "src_ip": "185.220.101.5", "input": "ls -la"}
