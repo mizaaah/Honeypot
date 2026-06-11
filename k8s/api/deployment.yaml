@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: honeypot-api
+  namespace: honeypot
+  labels:
+    app: honeypot-api
+    tier: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: honeypot-api
+  template:
+    metadata:
+      labels:
+        app: honeypot-api
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+      containers:
+        - name: honeypot-api
+          image: honeypot-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          env:
+            - name: ENV
+              value: "mock"
+            # Décommenter quand Loki sera disponible :
+            # - name: LOKI_HOST
+            #   value: "http://loki:3100"
+            # - name: LOKI_QUERY_PATH
+            #   value: "/loki/api/v1/query_range"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
