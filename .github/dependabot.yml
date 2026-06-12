@@ -1,18 +1,6 @@
 version: 2
-
 updates:
-  # Dépendances Python (requirements.txt)
-  - package-ecosystem: "pip"
-    directory: "/api"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
-    labels:
-      - "dependencies"
-      - "python"
-
-  # Actions GitHub (workflows)
+  # Actions GitHub (workflows) — ça existe toujours
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -23,9 +11,9 @@ updates:
       - "dependencies"
       - "github-actions"
 
-  # Image de base Docker
+  # Docker Cowrie — le seul Dockerfile qui existe pour l'instant
   - package-ecosystem: "docker"
-    directory: "/api"
+    directory: "/cowrie"
     schedule:
       interval: "weekly"
       day: "monday"
