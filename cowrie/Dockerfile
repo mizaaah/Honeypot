@@ -1,4 +1,4 @@
-FROM cowrie/cowrie:2.5.0
+FROM cowrie/cowrie:latest
 
 EXPOSE 2222
 
