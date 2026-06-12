@@ -54,7 +54,7 @@ jobs:
 
       - name: Build image Cowrie
         id: build-cowrie
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./cowrie
           push: false
@@ -80,7 +80,7 @@ jobs:
 
       - name: Push image Cowrie
         if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev') && steps.build-cowrie.outcome == 'success'
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./cowrie
           push: true
@@ -108,7 +108,7 @@ jobs:
 
       - name: Build image Collector
         id: build-collector
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           push: false
@@ -135,7 +135,7 @@ jobs:
 
       - name: Push image Collector
         if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev') && steps.build-collector.outcome == 'success'
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           push: true
@@ -163,7 +163,7 @@ jobs:
 
       - name: Build image API
         id: build-api
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./api
           push: false
@@ -190,7 +190,7 @@ jobs:
 
       - name: Push image API
         if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev') && steps.build-api.outcome == 'success'
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./api
           push: true
