@@ -2,33 +2,86 @@ apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
   name: cowrie-vm
-  namespace: default
+  namespace: honeypot
   labels:
-    app: cowrie
+    app: cowrie-vm
+    tier: honeypot-vm
 spec:
-  running: true
+  runStrategy: Always
   template:
     metadata:
       labels:
-        app: cowrie
+        app: cowrie-vm
+        tier: honeypot-vm
     spec:
+      architecture: amd64
       domain:
         cpu:
           cores: 1
+          model: host-model
         memory:
           guest: 1Gi
+          maxGuest: 4Gi
+        features:
+          acpi:
+            enabled: true
+        machine:
+          type: q35
         devices:
           disks:
             - name: containerdisk
               disk:
                 bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
           interfaces:
             - name: default
               masquerade: {}
+      evictionStrategy: None
       networks:
         - name: default
           pod: {}
       volumes:
         - name: containerdisk
           containerDisk:
-            image: cowrie/cowrie:latest
+            image: quay.io/containerdisks/ubuntu:22.04
+            imagePullPolicy: Always
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              package_update: true
+              packages:
+                - docker.io
+              write_files:
+                - path: /etc/cowrie/cowrie.cfg
+                  permissions: '0644'
+                  content: |
+                    [honeypot]
+                    hostname = svr04
+                    log_path = var/log/cowrie
+                    download_path = var/lib/cowrie/downloads
+                    listen_endpoints = tcp:2222:interface=0.0.0.0
+
+                    [output_jsonlog]
+                    enabled = true
+                    logfile = var/log/cowrie/cowrie.json
+              runcmd:
+                - systemctl enable --now docker
+                - docker run -d --name cowrie --restart unless-stopped -p 2222:2222 -v /etc/cowrie/cowrie.cfg:/home/cowrie/cowrie/etc/cowrie.cfg:ro ghcr.io/mizaaah/cowrie:latest
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cowrie-vm-svc
+  namespace: honeypot
+spec:
+  selector:
+    app: cowrie-vm
+    tier: honeypot-vm
+  type: NodePort
+  ports:
+    - name: ssh
+      port: 2222
+      targetPort: 2222
