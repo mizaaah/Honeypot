@@ -5,9 +5,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 import random
 
-# ---------------------------------------------------------------------------
 # App setup
-# ---------------------------------------------------------------------------
 
 app = FastAPI(
     title="Honeypot as a Service — API",
@@ -21,9 +19,7 @@ app = FastAPI(
     contact={"name": "Honeypot Team"},
 )
 
-# ---------------------------------------------------------------------------
 # Mock data
-# ---------------------------------------------------------------------------
 
 COUNTRIES = ["China", "Russia", "United States", "Germany", "Brazil", "Netherlands", "France", "India"]
 IPS = [
@@ -64,9 +60,7 @@ def _random_log(index: int) -> dict:
 random.seed(42)
 MOCK_LOGS = [_random_log(i) for i in range(500)]
 
-# ---------------------------------------------------------------------------
 # Response models
-# ---------------------------------------------------------------------------
 
 
 class LogEntry(BaseModel):
@@ -154,10 +148,7 @@ class TopCommandsResponse(BaseModel):
     }
 
 
-# ---------------------------------------------------------------------------
 # Endpoints
-# ---------------------------------------------------------------------------
-
 
 @app.get(
     "/logs",
@@ -270,9 +261,7 @@ def get_top_commands(
     return TopCommandsResponse(total_commands_executed=total, top_commands=top)
 
 
-# ---------------------------------------------------------------------------
 # Health check
-# ---------------------------------------------------------------------------
 
 
 @app.get(
