@@ -6,6 +6,7 @@
 # =============================================================================
 
 set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
 LOG="/var/log/hardening-honeypot.log"
 exec > >(tee -a "$LOG") 2>&1
 
@@ -27,7 +28,6 @@ echo ">> 0. Autorisation SSH LAN (protection anti-lockout)"
 iptables -I INPUT -p tcp --dport 22 -s 192.168.240.0/24 -j ACCEPT
 ok "SSH autorisé depuis 192.168.240.0/24"
 
-# Rendre la règle persistante
 apt-get install -y iptables-persistent > /dev/null 2>&1
 netfilter-persistent save > /dev/null 2>&1
 ok "Règle iptables persistante"
@@ -70,19 +70,17 @@ for key in "${!SSH_PARAMS[@]}"; do
   info "${key} = ${val}"
 done
 
-# Banner légal
-cat > /etc/ssh/banner << 'EOF'
+cat > /etc/ssh/banner << 'BANNER'
 ##############################################################
 # Systeme de securite — Acces non autorise interdit
 # Toute connexion est enregistree et analysee
 ##############################################################
-EOF
+BANNER
 
-# Vérification config SSH avant restart
-sshd -t && systemctl restart sshd && ok "SSH durci et redémarré" || {
+sshd -t && systemctl restart ssh && ok "SSH durci et redémarré" || {
   warn "Erreur config SSH — restauration du backup"
   cp "${SSH_CFG}.bak.$(date +%s)" "$SSH_CFG"
-  systemctl restart sshd
+  systemctl restart ssh
 }
 
 # --------------------------------------------------------------------------
@@ -92,8 +90,7 @@ echo ""
 echo ">> 2. Paramètres sysctl"
 
 SYSCTL_CFG="/etc/sysctl.d/99-honeypot-hardening.conf"
-cat > "$SYSCTL_CFG" << 'EOF'
-# Réseau — protection contre les attaques courantes
+cat > "$SYSCTL_CFG" << 'SYSCTL'
 net.ipv4.tcp_syncookies = 1
 net.ipv4.conf.all.accept_redirects = 0
 net.ipv4.conf.default.accept_redirects = 0
@@ -103,81 +100,59 @@ net.ipv4.conf.all.log_martians = 1
 net.ipv4.conf.default.log_martians = 1
 net.ipv4.icmp_echo_ignore_broadcasts = 1
 net.ipv4.icmp_ignore_bogus_error_responses = 1
-
-# rp_filter — désactivé sur ens34 pour éviter le lockout (multi-IP DHCP)
 net.ipv4.conf.all.rp_filter = 0
 net.ipv4.conf.default.rp_filter = 0
 net.ipv4.conf.ens34.rp_filter = 0
-
-net.ipv4.ip_forward = 1          # Nécessaire pour Kubernetes
-net.ipv6.conf.all.disable_ipv6 = 0  # IPv6 requis pour K8s
-
-# Kernel — durcissement mémoire et accès
+net.ipv4.ip_forward = 1
+net.ipv6.conf.all.disable_ipv6 = 0
 kernel.dmesg_restrict = 1
 kernel.kptr_restrict = 2
 kernel.sysrq = 0
 fs.suid_dumpable = 0
 kernel.randomize_va_space = 2
 kernel.perf_event_paranoid = 3
-
-# Filesystem
 fs.protected_hardlinks = 1
 fs.protected_symlinks = 1
-EOF
+SYSCTL
 
 sysctl --system > /dev/null && ok "Paramètres sysctl appliqués"
 
 # --------------------------------------------------------------------------
-# 3. Installation et configuration de auditd (CIS 4.x)
+# 3. auditd (CIS 4.x)
 # --------------------------------------------------------------------------
 echo ""
 echo ">> 3. auditd — journalisation des appels système"
 
 apt-get install -y auditd audispd-plugins > /dev/null 2>&1
 
-cat > /etc/audit/rules.d/honeypot.rules << 'EOF'
-# Supprimer les règles existantes
+cat > /etc/audit/rules.d/honeypot.rules << 'AUDIT'
 -D
-# Buffer
 -b 8192
-# Echecs critiques
 -f 2
-
-# Surveillance des connexions réseau
 -a always,exit -F arch=b64 -S connect -k network_connect
 -a always,exit -F arch=b64 -S accept -k network_accept
-
-# Surveillance des exécutions de commandes
 -a always,exit -F arch=b64 -S execve -k exec_commands
-
-# Surveillance des modifications de fichiers critiques
 -w /etc/passwd -p wa -k passwd_changes
 -w /etc/shadow -p wa -k shadow_changes
 -w /etc/ssh/sshd_config -p wa -k sshd_config
 -w /etc/sudoers -p wa -k sudoers_changes
-
-# Surveillance des montages
 -a always,exit -F arch=b64 -S mount -k mounts
-
-# Accès aux fichiers de log Cowrie
 -w /cowrie/var/log/ -p rwa -k cowrie_logs
-
-# Tentatives d'élévation de privilèges
 -a always,exit -F arch=b64 -S ptrace -k ptrace
 -w /usr/bin/sudo -p x -k sudo_exec
-EOF
+AUDIT
 
 systemctl enable --now auditd && ok "auditd installé et configuré"
 
 # --------------------------------------------------------------------------
-# 4. fail2ban — protection contre le brute-force sur le node lui-même
+# 4. fail2ban
 # --------------------------------------------------------------------------
 echo ""
 echo ">> 4. fail2ban"
 
 apt-get install -y fail2ban > /dev/null 2>&1
 
-cat > /etc/fail2ban/jail.local << 'EOF'
+cat > /etc/fail2ban/jail.local << 'FAIL2BAN'
 [DEFAULT]
 bantime  = 3600
 findtime = 600
@@ -190,14 +165,13 @@ port     = ssh
 logpath  = %(sshd_log)s
 maxretry = 3
 bantime  = 86400
-# Ne jamais bannir le LAN
 ignoreip = 127.0.0.1/8 192.168.240.0/24
-EOF
+FAIL2BAN
 
 systemctl enable --now fail2ban && ok "fail2ban configuré"
 
 # --------------------------------------------------------------------------
-# 5. Désactivation des services inutiles
+# 5. Services inutiles
 # --------------------------------------------------------------------------
 echo ""
 echo ">> 5. Services inutiles"
@@ -216,7 +190,7 @@ done
 ok "Services inutiles désactivés"
 
 # --------------------------------------------------------------------------
-# 6. Permissions fichiers critiques (CIS 6.x)
+# 6. Permissions fichiers critiques
 # --------------------------------------------------------------------------
 echo ""
 echo ">> 6. Permissions fichiers"
@@ -230,7 +204,7 @@ chmod 700 /root
 ok "Permissions appliquées"
 
 # --------------------------------------------------------------------------
-# 7. Désactivation du core dump
+# 7. Core dumps
 # --------------------------------------------------------------------------
 echo ""
 echo ">> 7. Core dumps"
@@ -252,6 +226,5 @@ echo ""
 warn "ACTIONS MANUELLES RESTANTES :"
 echo "  1. Vérifier que ta clé SSH publique est dans ~/.ssh/authorized_keys"
 echo "  2. Tester la connexion SSH depuis ton PC avant de fermer la console ESXi"
-echo "  3. Vérifier que K8s peut toujours communiquer après les NetworkPolicy"
-echo "  4. Lancer 'auditctl -l' pour vérifier les règles audit"
-echo "  5. Reboot recommandé pour activer tous les paramètres kernel"
+echo "  3. Lancer 'auditctl -l' pour vérifier les règles audit"
+echo "  4. Reboot recommandé pour activer tous les paramètres kernel"
