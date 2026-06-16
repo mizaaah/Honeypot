@@ -2,33 +2,74 @@ apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
   name: cowrie-vm
-  namespace: default
   labels:
     app: cowrie
 spec:
-  running: true
+  runStrategy: Always
   template:
     metadata:
       labels:
         app: cowrie
     spec:
+      architecture: amd64
       domain:
         cpu:
           cores: 1
+          model: host-model
         memory:
           guest: 1Gi
+          maxGuest: 4Gi
+        features:
+          acpi:
+            enabled: true
+        machine:
+          type: q35
         devices:
           disks:
             - name: containerdisk
               disk:
                 bus: virtio
+            - name: cloudinitdisk
+              disk:
+                bus: virtio
           interfaces:
             - name: default
               masquerade: {}
+      evictionStrategy: None
       networks:
         - name: default
           pod: {}
       volumes:
         - name: containerdisk
           containerDisk:
-            image: cowrie/cowrie:latest
+            image: quay.io/containerdisks/ubuntu:22.04
+            imagePullPolicy: Always
+        - name: cloudinitdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              package_update: true
+              packages:
+                - python3-pip
+                - python3-venv
+                - git
+              runcmd:
+                - useradd -m -s /bin/bash cowrie
+                - su - cowrie -c "git clone https://github.com/cowrie/cowrie /home/cowrie/cowrie"
+                - su - cowrie -c "python3 -m venv /home/cowrie/cowrie/cowrie-env"
+                - su - cowrie -c "/home/cowrie/cowrie/cowrie-env/bin/pip install -r /home/cowrie/cowrie/requirements.txt"
+                - cp /home/cowrie/cowrie/etc/cowrie.cfg.dist /home/cowrie/cowrie/etc/cowrie.cfg
+                - su - cowrie -c "/home/cowrie/cowrie/cowrie-env/bin/python /home/cowrie/cowrie/bin/cowrie start"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cowrie-vm-svc
+spec:
+  selector:
+    app: cowrie
+  type: NodePort
+  ports:
+    - name: ssh
+      port: 2222
+      targetPort: 2222
