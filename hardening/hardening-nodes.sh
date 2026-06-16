@@ -63,7 +63,7 @@ cat > /etc/ssh/banner << 'EOF'
 ##############################################################
 EOF
 
-systemctl restart sshd && ok "SSH durci et redemarré"
+systemctl restart ssh && ok "SSH durci et redemarré"
 
 # --------------------------------------------------------------------------
 # 2. Paramètres kernel sysctl (CIS 3.x, ANSSI R9, R10)
