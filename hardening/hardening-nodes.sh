@@ -19,6 +19,20 @@ echo " Hardening Linux — $(hostname) — $(date)"
 echo "============================================================"
 
 # --------------------------------------------------------------------------
+# 0. Règle iptables — Toujours autoriser SSH depuis le LAN (AVANT tout)
+# --------------------------------------------------------------------------
+echo ""
+echo ">> 0. Autorisation SSH LAN (protection anti-lockout)"
+
+iptables -I INPUT -p tcp --dport 22 -s 192.168.240.0/24 -j ACCEPT
+ok "SSH autorisé depuis 192.168.240.0/24"
+
+# Rendre la règle persistante
+apt-get install -y iptables-persistent > /dev/null 2>&1
+netfilter-persistent save > /dev/null 2>&1
+ok "Règle iptables persistante"
+
+# --------------------------------------------------------------------------
 # 1. SSH — Désactivation root + durcissement (ANSSI R67, CIS 5.2)
 # --------------------------------------------------------------------------
 echo ""
@@ -43,6 +57,7 @@ declare -A SSH_PARAMS=(
   ["UsePAM"]="yes"
   ["LogLevel"]="VERBOSE"
   ["Banner"]="/etc/ssh/banner"
+  ["AllowUsers"]="enzo"
 )
 
 for key in "${!SSH_PARAMS[@]}"; do
@@ -63,7 +78,12 @@ cat > /etc/ssh/banner << 'EOF'
 ##############################################################
 EOF
 
-systemctl restart sshd && ok "SSH durci et redemarré"
+# Vérification config SSH avant restart
+sshd -t && systemctl restart sshd && ok "SSH durci et redémarré" || {
+  warn "Erreur config SSH — restauration du backup"
+  cp "${SSH_CFG}.bak.$(date +%s)" "$SSH_CFG"
+  systemctl restart sshd
+}
 
 # --------------------------------------------------------------------------
 # 2. Paramètres kernel sysctl (CIS 3.x, ANSSI R9, R10)
@@ -83,8 +103,12 @@ net.ipv4.conf.all.log_martians = 1
 net.ipv4.conf.default.log_martians = 1
 net.ipv4.icmp_echo_ignore_broadcasts = 1
 net.ipv4.icmp_ignore_bogus_error_responses = 1
-net.ipv4.conf.all.rp_filter = 1
-net.ipv4.conf.default.rp_filter = 1
+
+# rp_filter — désactivé sur ens34 pour éviter le lockout (multi-IP DHCP)
+net.ipv4.conf.all.rp_filter = 0
+net.ipv4.conf.default.rp_filter = 0
+net.ipv4.conf.ens34.rp_filter = 0
+
 net.ipv4.ip_forward = 1          # Nécessaire pour Kubernetes
 net.ipv6.conf.all.disable_ipv6 = 0  # IPv6 requis pour K8s
 
@@ -166,6 +190,8 @@ port     = ssh
 logpath  = %(sshd_log)s
 maxretry = 3
 bantime  = 86400
+# Ne jamais bannir le LAN
+ignoreip = 127.0.0.1/8 192.168.240.0/24
 EOF
 
 systemctl enable --now fail2ban && ok "fail2ban configuré"
@@ -224,8 +250,8 @@ echo " Log complet : $LOG"
 echo "============================================================"
 echo ""
 warn "ACTIONS MANUELLES RESTANTES :"
-echo "  1. Configurer les clés SSH uniquement (PasswordAuthentication=no)"
-echo "  2. Vérifier que K8s peut toujours communiquer après les NetworkPolicy"
-echo "  3. Tester fail2ban : ssh -o NumberOfPasswordPrompts=4 root@localhost"
+echo "  1. Vérifier que ta clé SSH publique est dans ~/.ssh/authorized_keys"
+echo "  2. Tester la connexion SSH depuis ton PC avant de fermer la console ESXi"
+echo "  3. Vérifier que K8s peut toujours communiquer après les NetworkPolicy"
 echo "  4. Lancer 'auditctl -l' pour vérifier les règles audit"
 echo "  5. Reboot recommandé pour activer tous les paramètres kernel"
