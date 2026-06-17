@@ -1,80 +1,26 @@
-apiVersion: kubevirt.io/v1
-kind: VirtualMachine
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: cowrie-vm
+  name: cowrie
   namespace: honeypot
   labels:
     app: cowrie
 spec:
-  runStrategy: Always
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cowrie
   template:
     metadata:
       labels:
         app: cowrie
     spec:
-      architecture: amd64
-      domain:
-        cpu:
-          cores: 1
-          model: host-model
-        memory:
-          guest: 1Gi
-          maxGuest: 4Gi
-        features:
-          acpi:
-            enabled: true
-        machine:
-          type: q35
-        devices:
-          disks:
-            - name: containerdisk
-              disk:
-                bus: virtio
-            - name: cloudinitdisk
-              disk:
-                bus: virtio
-            - name: datadisk
-              disk:
-                bus: virtio
-          interfaces:
-            - name: default
-              masquerade: {}
-      evictionStrategy: None
-      networks:
-        - name: default
-          pod: {}
-      volumes:
-        - name: containerdisk
-          containerDisk:
-            image: quay.io/containerdisks/ubuntu:22.04
-            imagePullPolicy: Always
-        - name: cloudinitdisk
-          cloudInitNoCloud:
-            userData: |
-              #cloud-config
-              password: cowrie
-              chpasswd: { expire: False }
-              ssh_pwauth: true
-              runcmd:
-                - mkfs.ext4 /dev/vdc
-                - mkdir -p /opt/cowrie-data
-                - mount /dev/vdc /opt/cowrie-data
-                - echo '/dev/vdc /opt/cowrie-data ext4 defaults 0 0' >> /etc/fstab
-                - mkdir -p /var/cache/apt /var/lib/apt/lists
-                - mount --bind /opt/cowrie-data /var/cache/apt
-                - apt-get update -y
-                - apt-get install -y python3-pip python3-venv git
-                - umount /var/cache/apt
-                - useradd -m -s /bin/bash -d /opt/cowrie-data cowrie
-                - git clone https://github.com/cowrie/cowrie /opt/cowrie-data/cowrie
-                - chown -R cowrie:cowrie /opt/cowrie-data
-                - su - cowrie -c "python3 -m venv /opt/cowrie-data/cowrie/cowrie-env"
-                - su - cowrie -c "/opt/cowrie-data/cowrie/cowrie-env/bin/pip install -r /opt/cowrie-data/cowrie/requirements.txt"
-                - cp /opt/cowrie-data/cowrie/etc/cowrie.cfg.dist /opt/cowrie-data/cowrie/etc/cowrie.cfg
-                - su - cowrie -c "/opt/cowrie-data/cowrie/cowrie-env/bin/python /opt/cowrie-data/cowrie/bin/cowrie start"
-        - name: datadisk
-          emptyDisk:
-            capacity: 10Gi
+      containers:
+        - name: cowrie
+          image: ghcr.io/mizaaah/cowrie:latest
+          ports:
+            - containerPort: 2222
+          imagePullPolicy: Always
 ---
 apiVersion: v1
 kind: Service
