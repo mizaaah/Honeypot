@@ -60,8 +60,11 @@ spec:
                 - mkdir -p /opt/cowrie-data
                 - mount /dev/vdc /opt/cowrie-data
                 - echo '/dev/vdc /opt/cowrie-data ext4 defaults 0 0' >> /etc/fstab
+                - mkdir -p /var/cache/apt /var/lib/apt/lists
+                - mount --bind /opt/cowrie-data /var/cache/apt
                 - apt-get update -y
                 - apt-get install -y python3-pip python3-venv git
+                - umount /var/cache/apt
                 - useradd -m -s /bin/bash -d /opt/cowrie-data cowrie
                 - git clone https://github.com/cowrie/cowrie /opt/cowrie-data/cowrie
                 - chown -R cowrie:cowrie /opt/cowrie-data
