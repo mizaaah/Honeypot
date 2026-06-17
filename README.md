@@ -9,7 +9,7 @@
 [![Grafana](https://img.shields.io/badge/Dashboard-Grafana-F46800?logo=grafana&logoColor=white)](https://grafana.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Déploiement de honeypots SSH/Telnet en haute disponibilité sur Kubernetes**  
+**Déploiement de honeypots SSH/Telnet en haute disponibilité sur Kubernetes**
 Collecte de logs enrichis · Dashboard Grafana temps réel · API FastAPI · Hardening CIS/ANSSI
 
 </div>
@@ -19,56 +19,54 @@ Collecte de logs enrichis · Dashboard Grafana temps réel · API FastAPI · Har
 ## 📐 Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        🌐 Internet — Attaquants                         │
-│                                                                         │
-│           SSH/Telnet brute-force, scans, malware downloads...           │
-└──────────────────────────────────┬──────────────────────────────────────┘
-                                   │
-                                   ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    ☸️  Cluster k3s — namespace: honeypot                │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │               🪤  Layer Honeypot (HPA: 1 → 10 pods)             │   │
-│  │                                                                  │   │
-│  │   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │   │
-│  │   │  Cowrie Pod  │  │  Cowrie Pod  │  │  Cowrie Pod  │  · · ·  │   │
-│  │   │   port 2222  │  │   port 2222  │  │   port 2222  │         │   │
-│  │   └──────┬───────┘  └──────┬───────┘  └──────┬───────┘         │   │
-│  └──────────┼─────────────────┼─────────────────┼─────────────────┘   │
-│             │  logs JSON       │                 │                      │
-│             └──────────────────┼─────────────────┘                     │
-│                                ▼                                        │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                    🔄  Backend / Collecteur                      │   │
-│  │                                                                  │   │
-│  │   Parse logs JSON Cowrie · Enrichissement GeoIP · Threading     │   │
-│  └──────────────────┬────────────────────────────┬─────────────────┘   │
-│                     │                            │                      │
-│          ┌──────────▼──────────┐    ┌────────────▼──────────┐          │
-│          │    📊  Loki         │    │   🗄️  PostgreSQL       │          │
-│          │    logs structurés  │    │   données brutes       │          │
-│          └──────────┬──────────┘    └────────────┬──────────┘          │
-│                     │                            │                      │
-│          ┌──────────▼────────────────────────────▼──────────┐          │
-│          │                 🌐  FastAPI                        │          │
-│          │      REST API · Webhooks · Alertes                │          │
-│          └──────────────────────┬────────────────────────────┘          │
-│                                 │                                       │
-│          ┌──────────────────────▼────────────────────────────┐          │
-│          │              📈  Grafana Dashboard                  │          │
-│          │   Carte géo · Top commandes · Timeline · Alertes   │          │
-│          └───────────────────────────────────────────────────┘          │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │  🖥️  Infrastructure — ESXi + k3s                                 │  │
-│  │                                                                   │  │
-│  │   k3s-master (192.168.240.247)  ·  control-plane                 │  │
-│  │   k3s-worker-1 (192.168.240.196)  ·  Cowrie pods + KubeVirt      │  │
-│  │   k3s-worker-2 (192.168.240.253)  ·  Backend + Grafana           │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
+                        ╔══════════════════════════════╗
+                        ║   🌐  Internet — Attaquants  ║
+                        ║  SSH brute-force · Malware   ║
+                        ╚══════════════╤═══════════════╝
+                                       │
+                                       ▼
+╔══════════════════════════════════════════════════════════════════════════╗
+║               ☸️  Cluster k3s  —  namespace: honeypot                   ║
+║                                                                          ║
+║  ╔════════════════════════════════════════════════════════════════════╗  ║
+║  ║           🪤  Layer Honeypot  (HPA: 1 → 10 pods)                  ║  ║
+║  ║                                                                    ║  ║
+║  ║   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐           ║  ║
+║  ║   │ Cowrie Pod  │    │ Cowrie Pod  │    │ Cowrie Pod  │  · · ·    ║  ║
+║  ║   │  port 2222  │    │  port 2222  │    │  port 2222  │           ║  ║
+║  ║   └──────┬──────┘    └──────┬──────┘    └──────┬──────┘           ║  ║
+║  ╚══════════╪═════════════════╪═════════════════╪══════════════════╝  ║
+║             │   logs JSON     │                 │                      ║
+║             └─────────────────┼─────────────────┘                     ║
+║                               ▼                                        ║
+║  ╔════════════════════════════════════════════════════════════════════╗ ║
+║  ║              🔄  Backend  —  Collecteur Python                     ║ ║
+║  ║        Parse logs JSON · Enrichissement GeoIP · Threading          ║ ║
+║  ╚═══════════════════════╤══════════════════════╤═════════════════════╝ ║
+║                          │                      │                       ║
+║              ┌───────────▼──────┐   ┌───────────▼──────┐               ║
+║              │   📊  Loki       │   │  🗄️  PostgreSQL   │               ║
+║              │  logs structurés │   │  données brutes   │               ║
+║              └───────────┬──────┘   └───────────┬──────┘               ║
+║                          │                      │                       ║
+║              ┌───────────▼──────────────────────▼──────┐               ║
+║              │            🌐  FastAPI                    │               ║
+║              │    REST API · Webhooks · Alertes          │               ║
+║              └─────────────────────┬────────────────────┘               ║
+║                                    │                                    ║
+║              ┌─────────────────────▼────────────────────┐               ║
+║              │         📈  Grafana Dashboard             │               ║
+║              │  Carte géo · Top cmds · Timeline · Alertes│               ║
+║              └──────────────────────────────────────────┘               ║
+║                                                                          ║
+║  ╔════════════════════════════════════════════════════════════════════╗  ║
+║  ║  🖥️  Infrastructure ESXi + k3s                                    ║  ║
+║  ║                                                                    ║  ║
+║  ║  k3s-master   192.168.240.247   control-plane                     ║  ║
+║  ║  k3s-worker-1 192.168.240.196   Cowrie pods (nested virt)         ║  ║
+║  ║  k3s-worker-2 192.168.240.253   Backend + Grafana                 ║  ║
+║  ╚════════════════════════════════════════════════════════════════════╝  ║
+╚══════════════════════════════════════════════════════════════════════════╝
 ```
 
 ---
@@ -79,12 +77,12 @@ Collecte de logs enrichis · Dashboard Grafana temps réel · API FastAPI · Har
 |-----------|-------------|------|
 | 🪤 Honeypot SSH/Telnet | [Cowrie](https://github.com/cowrie/cowrie) | Simulation système vulnérable, capture des attaques |
 | ☸️ Orchestration | k3s v1.35 + KubeVirt | Déploiement, scaling, isolation des pods |
-| 📈 Auto-scaling | HPA (Horizontal Pod Autoscaler) | Scale 1→10 pods selon charge CPU/mémoire |
+| 📈 Auto-scaling | HPA (Horizontal Pod Autoscaler) | Scale 1 → 10 pods selon charge CPU/mémoire |
 | 🔄 Collecteur | Python 3.12 | Parse logs JSON, enrichissement GeoIP |
 | 🌐 API | FastAPI | REST API, webhooks, données Grafana |
 | 📊 Dashboard | Grafana + Loki | Visualisation temps réel, alertes |
 | 🔐 Sécurité infra | CIS Benchmark + ANSSI | Hardening des nodes Kubernetes |
-| 🚀 CI/CD | GitHub Actions + Trivy | Build, scan vulnérabilités, push images |
+| 🚀 CI/CD | GitHub Actions + Trivy | Build, scan vulnérabilités, push images GHCR |
 
 ---
 
@@ -115,17 +113,12 @@ Honeypot/
 ├── k8s/                        # Manifests Kubernetes
 │   ├── namespace.yaml          # Namespace honeypot
 │   ├── network-policies.yaml   # NetworkPolicy — isolation réseau
-│   ├── cowrie/
-│   │   ├── deployment.yaml     # Deployment Cowrie + SecurityContext
-│   │   ├── configmap.yaml      # ConfigMap cowrie.cfg
-│   │   ├── hpa.yaml            # HPA auto-scaling 1→10 pods
-│   │   └── service.yaml        # NodePort SSH/Telnet
 │   ├── api/
 │   │   ├── deployment.yaml
 │   │   ├── hpa.yaml
 │   │   └── service.yaml
 │   └── kubevirt/
-│       └── cowrie-vm.yaml      # Deployment Cowrie (pod) via image GHCR
+│       └── cowrie-vm.yaml      # Deployment Cowrie via image GHCR
 └── README.md
 ```
 
@@ -136,7 +129,7 @@ Honeypot/
 ### Prérequis
 
 - Cluster k3s opérationnel (3 nodes minimum)
-- `kubectl` configuré (`KUBECONFIG=/etc/rancher/k3s/k3s.yaml`)
+- `kubectl` configuré : `export KUBECONFIG=/etc/rancher/k3s/k3s.yaml`
 - Accès à `ghcr.io/mizaaah/cowrie:latest` (image CI/CD)
 
 ### Déploiement complet
@@ -179,7 +172,7 @@ ssh root@<WORKER_IP> -p <NODEPORT>
 
 ## 🔐 Hardening des nodes
 
-Le script `hardening/hardening-nodes.sh` applique les recommandations **CIS Benchmark** et **ANSSI** sur chaque node Kubernetes.
+Le script `hardening/hardening-nodes.sh` applique les recommandations **CIS Benchmark** et **ANSSI** sur chaque node.
 
 ### Ce qui est appliqué
 
@@ -189,9 +182,9 @@ Le script `hardening/hardening-nodes.sh` applique les recommandations **CIS Benc
 | Kernel | sysctl — protection SYN flood, ICMP, martians, ASLR, kptr_restrict |
 | Audit | auditd — journalisation connexions, execve, sudo, modifications /etc |
 | Brute-force | fail2ban — ban 24h après 3 échecs SSH (LAN ignoré) |
-| Services | Désactivation bluetooth, avahi, cups, postfix, rpcbind... |
+| Services | Désactivation bluetooth, avahi, cups, postfix, rpcbind |
 | Fichiers | chmod 000 /etc/shadow, chmod 600 /etc/ssh/sshd_config |
-| Core dumps | Désactivés (limits.conf + sysctl) |
+| Core dumps | Désactivés via limits.conf + ulimit |
 
 ```bash
 # Lancer sur chaque node (master + workers)
@@ -210,19 +203,17 @@ sudo fail2ban-client status sshd
 
 ## 🪤 Cowrie — Honeypot SSH
 
-Cowrie simule un faux serveur Linux vulnérable. Tout attaquant qui se connecte croit interagir avec un vrai système.
+Cowrie simule un faux serveur Linux vulnérable. L'attaquant croit interagir avec un vrai système.
 
 ### Ce que Cowrie capture
 
 - Toutes les commandes tapées par l'attaquant
 - Tentatives de téléchargement de malware (`wget`, `curl`)
-- Credentials utilisés (login/password)
+- Credentials utilisés (login / password)
 - Empreinte du client SSH
-- Durée et timeline de la session
+- Durée et timeline complète de la session
 
 ### Logs JSON
-
-Les logs sont stockés dans `var/log/cowrie/cowrie.json` au format JSONLines :
 
 ```json
 {
@@ -235,8 +226,6 @@ Les logs sont stockés dans `var/log/cowrie/cowrie.json` au format JSONLines :
 ```
 
 ### Configuration
-
-La config principale est dans `cowrie/cowrie.cfg` :
 
 ```ini
 [honeypot]
@@ -254,114 +243,111 @@ logfile = var/log/cowrie/cowrie.json
 
 ### Grafana Dashboard
 
-Dashboards temps réel disponibles :
+| Dashboard | Contenu |
+|-----------|---------|
+| 🗺️ Carte géographique | Localisation des attaquants via GeoIP |
+| 🔝 Top commandes | Top 10 des commandes les plus utilisées |
+| 📅 Timeline | Volume d'attaques par heure / jour |
+| 🔑 Credentials | Top logins et passwords tentés |
+| 🚨 Alertes | Seuil > 100 tentatives/min |
 
-- **Carte géographique** — localisation des attaquants (GeoIP)
-- **Top 10 commandes** — commandes les plus utilisées
-- **Timeline des attaques** — volume par heure/jour
-- **Credentials** — top logins/passwords tentés
-- **Alertes** — seuil > 100 tentatives/min
+### Loki — Requêtes LogQL
 
-### Loki — Logs structurés
-
-```bash
-# Requête LogQL — toutes les connexions réussies
+```logql
+# Toutes les connexions réussies
 {app="cowrie"} |= "login.success"
 
-# Requête LogQL — top IPs attaquantes
+# Top IPs attaquantes
 {app="cowrie"} | json | line_format "{{.src_ip}}"
+
+# Commandes exécutées
+{app="cowrie"} |= "cowrie.command.input"
 ```
 
 ---
 
 ## 🔄 CI/CD — GitHub Actions
 
-Le pipeline `.github/workflows/ci.yml` se déclenche sur chaque push sur `main` et `dev` :
-
 ```
-Push → Lint & Tests → Build Docker → Trivy Scan → Push GHCR
-                                          ↓
-                                   Upload SARIF (GitHub Security)
+Push (main/dev)
+      │
+      ▼
+┌─────────────┐
+│ Lint & Test │  ruff + pytest + coverage
+└──────┬──────┘
+       │
+       ├──────────────────┬──────────────────┐
+       ▼                  ▼                  ▼
+┌────────────┐    ┌────────────┐    ┌────────────┐
+│   Cowrie   │    │ Collector  │    │    API     │
+│   Build    │    │   Build    │    │   Build    │
+│ Trivy Scan │    │ Trivy Scan │    │ Trivy Scan │
+│  Push GHCR │    │  Push GHCR │    │  Push GHCR │
+└────────────┘    └────────────┘    └────────────┘
+       │
+       ▼
+GitHub Security (SARIF upload)
 ```
-
-| Job | Description |
-|-----|-------------|
-| `lint-test` | Ruff linter + pytest avec coverage |
-| `build-cowrie` | Build + Trivy scan + push `ghcr.io/mizaaah/cowrie:latest` |
-| `build-collector` | Build + Trivy scan + push `ghcr.io/mizaaah/collector:latest` |
-| `build-api` | Build + Trivy scan + push `ghcr.io/mizaaah/api:latest` |
 
 ---
 
 ## 🛡️ Sécurité Kubernetes
 
-### SecurityContext — pods
-
-Chaque pod Cowrie tourne avec les contraintes suivantes :
+### SecurityContext des pods
 
 ```yaml
 securityContext:
-  runAsNonRoot: true
-  readOnlyRootFilesystem: true
-  allowPrivilegeEscalation: false
+  runAsNonRoot: true                 # Pas de root dans les containers
+  readOnlyRootFilesystem: true       # Filesystem en lecture seule
+  allowPrivilegeEscalation: false    # Pas d'escalade de privilèges
   capabilities:
-    drop: [ALL]
+    drop: [ALL]                      # Zéro capabilities Linux
   seccompProfile:
-    type: RuntimeDefault
-automountServiceAccountToken: false
+    type: RuntimeDefault             # Filtrage des appels système
+automountServiceAccountToken: false  # Pas d'accès à l'API K8s
 ```
 
-### NetworkPolicy — isolation réseau
+### Flux réseau (NetworkPolicy)
 
 ```
-Cowrie pods  ──logs──►  Collecteur  ──►  Loki / PostgreSQL
-                                    ──►  API
-    ▲
-    │ SSH/Telnet uniquement
-    │
- Internet
+Internet ──SSH/Telnet──► Cowrie pods ──logs JSON──► Collecteur ──► Loki
+                                                               ──► PostgreSQL
+                                                               ──► API ──► Grafana
 ```
 
-Aucune communication inter-pods non autorisée. L'IP source des attaquants est préservée via `externalTrafficPolicy: Local`.
+Aucune communication non autorisée entre pods. IP source préservée via `externalTrafficPolicy: Local`.
 
 ---
 
 ## 💻 Développement local
 
 ```bash
-# Lancer Cowrie localement (Docker)
+# Lancer Cowrie en local (Docker)
 cd cowrie
 docker-compose up -d
+ssh root@localhost -p 2222     # test connexion honeypot
 
-# Tester la connexion
-ssh root@localhost -p 2222
-
-# Voir les logs
-docker logs cowrie -f
-```
-
-```bash
-# Lancer le backend
+# Backend collecteur
 cd backend
 pip install -r requirements.txt
 python collecteur.py
 
-# Lancer l'API
+# API FastAPI
 cd api
 pip install -r requirements.txt
-uvicorn main:app --reload
+uvicorn main:app --reload      # disponible sur http://localhost:8000
 ```
 
 ---
 
 ## 👥 Équipe
 
-| Membre | Rôle |
-|--------|------|
-| **Mizaah** | Lead Infrastructure — k3s, KubeVirt, Hardening, ESXi |
-| **Enzo** | Infrastructure — Setup VMs, déploiement cluster |
-| **joris-landaret** | Backend — Collecteur Python, Loki, API |
-| **takseyes** | Backend — Dockerfiles, CI/CD, Grafana |
+| Membre | Rôle | Responsabilités |
+|--------|------|-----------------|
+| **Enzo (Mizaah)** | 🏗️ Architecte / DevOps Lead | Cluster k3s, ESXi, KubeVirt, Hardening CIS/ANSSI |
+| **Joris** | 🐍 Backend Python / Data Pipeline | Collecteur Python, GeoIP, Loki, PostgreSQL |
+| **Sébastien** | 🌐 FastAPI & Grafana | REST API, dashboards Grafana, alerting rules |
+| **Lili** | 🐳 Containerisation & Git Flow | Dockerfile Cowrie, CI/CD GitHub Actions, GHCR |
 
 ---
 
