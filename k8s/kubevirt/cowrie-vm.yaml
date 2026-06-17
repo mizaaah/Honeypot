@@ -55,22 +55,20 @@ spec:
               password: cowrie
               chpasswd: { expire: False }
               ssh_pwauth: true
-              package_update: true
-              packages:
-                - python3-pip
-                - python3-venv
-                - git
-              growpart:
-                mode: auto
-                devices: ['/dev/vda']
-              resize_rootfs: true
               runcmd:
-                - useradd -m -s /bin/bash cowrie
-                - su - cowrie -c "git clone https://github.com/cowrie/cowrie /home/cowrie/cowrie"
-                - su - cowrie -c "python3 -m venv /home/cowrie/cowrie/cowrie-env"
-                - su - cowrie -c "/home/cowrie/cowrie/cowrie-env/bin/pip install -r /home/cowrie/cowrie/requirements.txt"
-                - cp /home/cowrie/cowrie/etc/cowrie.cfg.dist /home/cowrie/cowrie/etc/cowrie.cfg
-                - su - cowrie -c "/home/cowrie/cowrie/cowrie-env/bin/python /home/cowrie/cowrie/bin/cowrie start"
+                - mkfs.ext4 /dev/vdc
+                - mkdir -p /opt/cowrie-data
+                - mount /dev/vdc /opt/cowrie-data
+                - echo '/dev/vdc /opt/cowrie-data ext4 defaults 0 0' >> /etc/fstab
+                - apt-get update -y
+                - apt-get install -y python3-pip python3-venv git
+                - useradd -m -s /bin/bash -d /opt/cowrie-data cowrie
+                - git clone https://github.com/cowrie/cowrie /opt/cowrie-data/cowrie
+                - chown -R cowrie:cowrie /opt/cowrie-data
+                - su - cowrie -c "python3 -m venv /opt/cowrie-data/cowrie/cowrie-env"
+                - su - cowrie -c "/opt/cowrie-data/cowrie/cowrie-env/bin/pip install -r /opt/cowrie-data/cowrie/requirements.txt"
+                - cp /opt/cowrie-data/cowrie/etc/cowrie.cfg.dist /opt/cowrie-data/cowrie/etc/cowrie.cfg
+                - su - cowrie -c "/opt/cowrie-data/cowrie/cowrie-env/bin/python /opt/cowrie-data/cowrie/bin/cowrie start"
         - name: datadisk
           emptyDisk:
             capacity: 10Gi
