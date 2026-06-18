@@ -1,6 +1,4 @@
 ---
-# Politique réseau pour Cowrie : accepte uniquement les connexions externes
-# et autorise les exports de logs vers le collecteur. Bloque tout le reste.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -15,7 +13,6 @@ spec:
     - Egress
 
   ingress:
-    # Autorise les connexions SSH/Telnet depuis l'extérieur (attaquants)
     - ports:
         - port: 2222
           protocol: TCP
@@ -23,7 +20,6 @@ spec:
           protocol: TCP
 
   egress:
-    # Autorise uniquement les exports vers le collecteur Python (backend)
     - to:
         - podSelector:
             matchLabels:
@@ -31,7 +27,6 @@ spec:
       ports:
         - port: 5000
           protocol: TCP
-    # Autorise la résolution DNS (nécessaire pour GeoIP)
     - to:
         - namespaceSelector: {}
       ports:
@@ -41,7 +36,6 @@ spec:
           protocol: TCP
 
 ---
-# Politique réseau pour le collecteur Python
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -56,7 +50,6 @@ spec:
     - Egress
 
   ingress:
-    # Accepte les logs venant de Cowrie
     - from:
         - podSelector:
             matchLabels:
@@ -64,7 +57,6 @@ spec:
       ports:
         - port: 5000
           protocol: TCP
-    # Accepte les requêtes venant de l'API FastAPI
     - from:
         - podSelector:
             matchLabels:
@@ -74,7 +66,6 @@ spec:
           protocol: TCP
 
   egress:
-    # Export vers Loki / Elasticsearch
     - to:
         - podSelector:
             matchLabels:
@@ -82,19 +73,16 @@ spec:
       ports:
         - port: 3100
           protocol: TCP
-    # DNS
     - to:
         - namespaceSelector: {}
       ports:
         - port: 53
           protocol: UDP
-    # API GeoIP externe
     - ports:
         - port: 443
           protocol: TCP
 
 ---
-# Politique réseau pour l'API FastAPI
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -109,7 +97,6 @@ spec:
     - Egress
 
   ingress:
-    # Accès depuis Grafana et l'extérieur (via Ingress)
     - ports:
         - port: 8000
           protocol: TCP
