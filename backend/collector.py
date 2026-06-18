@@ -1,36 +1,37 @@
 import time
-import docker
-from docker.errors import NotFound
-import requests
 import json
+import requests
+import threading
+from kubernetes import client, config
+from kubernetes.client.rest import ApiException
 
-LOKI_URL = "http://localhost:3100/loki/api/v1/push"
+LOKI_URL = "http://loki:3100/loki/api/v1/push"
 
 # --- Pour l'Alerting ---
 COMPTEUR_ATTAQUES = 0
 DERNIER_RESET_TEMPS = time.time()
-SEUIL_ALERTE = 100  # 100 tentatives
+SEUIL_ALERTE = 100
 INTERVALLE_TEMPS = 60
+lock = threading.Lock()
+
 
 def verifier_alerte_seuil():
-    """Vérifie si le seuil d'attaques par minute est dépassé """
+    """Vérifie si le seuil d'attaques par minute est dépassé"""
     global COMPTEUR_ATTAQUES, DERNIER_RESET_TEMPS
     temps_actuel = time.time()
 
-    # Si une minute s'est écoulée, on réinitialise le compteur
-    if temps_actuel - DERNIER_RESET_TEMPS > INTERVALLE_TEMPS:
-        COMPTEUR_ATTAQUES = 0
-        DERNIER_RESET_TEMPS = temps_actuel
+    with lock:
+        if temps_actuel - DERNIER_RESET_TEMPS > INTERVALLE_TEMPS:
+            COMPTEUR_ATTAQUES = 0
+            DERNIER_RESET_TEMPS = temps_actuel
 
-    COMPTEUR_ATTAQUES += 1
+        COMPTEUR_ATTAQUES += 1
+        return COMPTEUR_ATTAQUES > SEUIL_ALERTE
 
-    # On retourne True si le seuil est dépassé, sinon False
-    return COMPTEUR_ATTAQUES > SEUIL_ALERTE
 
 def enrichir_geoip(ip_attaquant):
     """Interroge l'API ip-api pour géolocaliser l'IP"""
-    # On évite de géolocaliser les IPs locales de test (localhost)
-    if ip_attaquant in ["127.0.0.1", "localhost"] or ip_attaquant.startswith("192.168."):
+    if ip_attaquant in ["127.0.0.1", "localhost"] or ip_attaquant.startswith("192.168.") or ip_attaquant.startswith("10."):
         return {"pays": "Local network", "latitude": 0.0, "longitude": 0.0}
 
     try:
@@ -46,20 +47,20 @@ def enrichir_geoip(ip_attaquant):
                 "longitude": donnees_geo.get("lon")
             }
     except Exception as e:
-        print(f"[-] Erreur lors de l'enrichissement GeoIP : {e}")
+        print(f"[-] Erreur GeoIP : {e}")
 
     return {"pays": "Inconnu", "latitude": 0.0, "longitude": 0.0}
 
+
 def send_to_loki(log_dict):
-    """Transforme le dictionnaire en JSON string et l'envoie à Loki """
+    """Envoie le log enrichi à Loki"""
     try:
-        # On convertit le dictionnaire enrichi en chaîne de caractères JSON
         line_json_string = json.dumps(log_dict)
 
         payload = {
             "streams": [
                 {
-                    "stream": {"job": "cowrie", "container": "cowrie2"},
+                    "stream": {"job": "cowrie", "app": "cowrie"},
                     "values": [[str(int(time.time() * 1e9)), line_json_string]],
                 }
             ]
@@ -68,58 +69,137 @@ def send_to_loki(log_dict):
         if reponse.status_code != 204:
             print(f"[-] Erreur Loki (Code {reponse.status_code}): {reponse.text}")
     except requests.exceptions.RequestException as e:
-        print(f"[-] Impossible de joindre Loki : {e}. Le log est mis de côté.")
+        print(f"[-] Impossible de joindre Loki : {e}")
 
-def collect_logs():
-    client = docker.from_env()
-    try:
-        container = client.containers.get("cowrie2")
-    except NotFound:
-        print("Le conteneur 'cowrie2' est introuvable. Vérifiez que P4 l'a démarré.")
+
+def traiter_ligne(line, pod_name):
+    """Traite une ligne de log JSON de Cowrie"""
+    line = line.strip()
+    if not line:
         return
 
-    print("Collecteur démarré, en attente de logs...")
+    try:
+        log_data = json.loads(line)
 
-    for log in container.logs(stream=True, follow=True, tail=10):
-        line = log.decode("utf-8").strip()
-        if line:
-            try:
-                # 1. Transformation en dictionnaire
-                log_data = json.loads(line)
+        # Ajout du nom du pod source
+        log_data["pod"] = pod_name
 
-                # 2. Extraction de l'IP et enrichissement GeoIP
-                ip_attaquant = log_data.get("src_ip")
-                if ip_attaquant:
-                    log_data["geoip"] = enrichir_geoip(ip_attaquant)
+        # Enrichissement GeoIP
+        ip_attaquant = log_data.get("src_ip")
+        if ip_attaquant:
+            log_data["geoip"] = enrichir_geoip(ip_attaquant)
 
-                # 3. Logique d'affichage et d'alerting
-                id_evenement = log_data.get("eventid")
+        id_evenement = log_data.get("eventid")
+        log_data["alerte_seuil"] = False
 
-                # Par défaut, pas d'alerte sur le log
-                log_data["alerte_seuil"] = False
+        if id_evenement == "cowrie.login.failed":
+            user = log_data.get("username")
+            pwd = log_data.get("password")
+            print(f"[{pod_name}] Tentative connexion : '{user}' / '{pwd}'")
 
-                if id_evenement == "cowrie.login.failed":
-                    user = log_data.get("username")
-                    pwd = log_data.get("password")
-                    print(f"Tentative de connexion avec l'utilisateur '{user}' et le mot de passe '{pwd}'")
+            if verifier_alerte_seuil():
+                print(f"🚨 [ALERTE] Seuil de {SEUIL_ALERTE} attaques/min dépassé !")
+                log_data["alerte_seuil"] = True
 
-                    # VÉRIFICATION DU SEUIL D'ALERTE
-                    # Si la fonction renvoie True, on passe le champ à True dans le JSON
-                    if verifier_alerte_seuil():
-                        print(f"🚨 [ALERTE SÉCURITÉ] Seuil de {SEUIL_ALERTE} attaques dépassé !")
-                        log_data["alerte_seuil"] = True
+        elif id_evenement == "cowrie.command.input":
+            command = log_data.get("input")
+            print(f"[{pod_name}] Commande : {command}")
 
-                elif id_evenement == "cowrie.command.input":
-                    command = log_data.get("input")
-                    print(f"Commande tapée par le hacker : {command}")
+        elif id_evenement == "cowrie.session.connect":
+            ip = log_data.get("src_ip")
+            print(f"[{pod_name}] Nouvelle connexion depuis : {ip}")
 
-                # 4. Envoie du dictionnaire proprement enrichi à Loki
-                send_to_loki(log_data)
-                print(f"[+] Log enrichi et envoyé pour l'IP: {ip_attaquant}")
+        # Envoi à Loki
+        send_to_loki(log_data)
+        print(f"[+] Log envoyé pour IP: {ip_attaquant} depuis {pod_name}")
 
-            except json.JSONDecodeError:
-                # On ignore proprement les lignes qui ne sont pas du JSON
-                continue
+    except json.JSONDecodeError:
+        pass  # Ignorer les lignes non-JSON (démarrage Cowrie, etc.)
+
+
+def stream_pod_logs(pod_name, namespace="honeypot"):
+    """Stream les logs d'un pod Cowrie"""
+    v1 = client.CoreV1Api()
+    print(f"[*] Démarrage stream logs pour {pod_name}")
+
+    while True:
+        try:
+            logs = v1.read_namespaced_pod_log(
+                name=pod_name,
+                namespace=namespace,
+                follow=True,
+                _preload_content=False,
+                tail_lines=0  # Ne lire que les nouveaux logs
+            )
+
+            for chunk in logs:
+                for line in chunk.decode("utf-8").splitlines():
+                    traiter_ligne(line, pod_name)
+
+        except ApiException as e:
+            print(f"[-] Erreur API K8s pour {pod_name}: {e}")
+            time.sleep(5)
+        except Exception as e:
+            print(f"[-] Erreur inattendue pour {pod_name}: {e}")
+            time.sleep(5)
+
+
+def collect_logs():
+    """Point d'entrée principal — collecte les logs de tous les pods Cowrie"""
+
+    # Charger la config Kubernetes
+    try:
+        config.load_incluster_config()  # Dans un pod Kubernetes (production)
+        print("[*] Config Kubernetes chargée (in-cluster)")
+    except Exception:
+        config.load_kube_config()       # En local avec kubeconfig
+        print("[*] Config Kubernetes chargée (kubeconfig local)")
+
+    v1 = client.CoreV1Api()
+
+    print("[*] Collecteur Honeypot démarré — namespace: honeypot")
+    print(f"[*] Seuil d'alerte : {SEUIL_ALERTE} attaques/{INTERVALLE_TEMPS}s")
+    print(f"[*] Loki URL : {LOKI_URL}")
+
+    threads = []
+
+    while True:
+        try:
+            # Récupérer tous les pods Cowrie en Running
+            pods = v1.list_namespaced_pod(
+                namespace="honeypot",
+                label_selector="app=cowrie"
+            )
+
+            pods_actifs = [
+                pod.metadata.name
+                for pod in pods.items
+                if pod.status.phase == "Running"
+            ]
+
+            # Lancer un thread par pod non encore streamé
+            pods_en_cours = [t.name for t in threads if t.is_alive()]
+
+            for pod_name in pods_actifs:
+                if pod_name not in pods_en_cours:
+                    print(f"[+] Nouveau pod détecté : {pod_name}")
+                    t = threading.Thread(
+                        target=stream_pod_logs,
+                        args=(pod_name,),
+                        name=pod_name,
+                        daemon=True
+                    )
+                    t.start()
+                    threads.append(t)
+
+            # Nettoyer les threads morts
+            threads = [t for t in threads if t.is_alive()]
+
+        except ApiException as e:
+            print(f"[-] Erreur liste pods : {e}")
+
+        # Vérifier les nouveaux pods toutes les 30 secondes
+        time.sleep(30)
 
 
 if __name__ == "__main__":
