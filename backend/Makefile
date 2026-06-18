@@ -4,7 +4,7 @@ setup:
 	.venv/bin/pip install -r requirements.txt
 
 run:
-	.venv/bin/python collecteur.py
+	.venv/bin/python collector.py
 
 dev:
-	.venv/bin/python collecteur.py --debug
+	.venv/bin/python collector.py --debug
