@@ -16,9 +16,9 @@ spec:
       labels:
         app: loki
     spec:
-      automountServiceAccountToken: false
       nodeSelector:
         kubernetes.io/hostname: k3s-worker-2
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
