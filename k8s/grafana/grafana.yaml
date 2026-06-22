@@ -1,5 +1,4 @@
-# deploiment grafana
-
+# déploiement grafana
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -19,6 +18,8 @@ spec:
         app: grafana
     spec:
       automountServiceAccountToken: false
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker-2
       securityContext:
         runAsNonRoot: true
         runAsUser: 472
@@ -32,11 +33,11 @@ spec:
               name: http
           env:
             - name: GF_SECURITY_ADMIN_PASSWORD
-              value: "honeypot-admin"   # à remplacer par un secret k8s en prod
+              value: "honeypot-admin"
             - name: GF_PATHS_PROVISIONING
               value: /etc/grafana/provisioning
             - name: GF_INSTALL_PLUGINS
-              value: "grafana-worldmap-panel"  # plugin carte
+              value: "grafana-worldmap-panel"
           volumeMounts:
             - name: grafana-datasources
               mountPath: /etc/grafana/provisioning/datasources
@@ -81,9 +82,8 @@ spec:
             name: grafana-dashboard-honeypot
         - name: grafana-data
           emptyDir: {}
-
-# config loki
-
+---
+# configmap datasource loki
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -99,9 +99,8 @@ data:
         url: http://loki:3100
         isDefault: true
         editable: false
-
+---
 # configmap dashboard
-
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -119,9 +118,8 @@ data:
         editable: false
         options:
           path: /var/lib/grafana/dashboards
-
-# service grafana
-
+---
+# service grafana — LoadBalancer pour accès externe
 apiVersion: v1
 kind: Service
 metadata:
@@ -138,4 +136,4 @@ spec:
       protocol: TCP
       port: 3000
       targetPort: 3000
-  type: ClusterIP
+  type: LoadBalancer
