@@ -1,0 +1,14 @@
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: honeypot-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - 192.168.240.200-192.168.240.210
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: honeypot-l2
+  namespace: metallb-system
