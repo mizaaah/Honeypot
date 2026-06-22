@@ -15,7 +15,6 @@ spec:
         app: cowrie
     spec:
       tolerations:
-        # Exclure le master — Cowrie uniquement sur les workers
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
           effect: NoSchedule
@@ -48,8 +47,8 @@ metadata:
 spec:
   selector:
     app: cowrie
-  type: NodePort
+  type: LoadBalancer
   ports:
     - name: ssh
-      port: 2222
+      port: 22
       targetPort: 2222
