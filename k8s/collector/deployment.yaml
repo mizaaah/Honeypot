@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: collector
+  namespace: honeypot
+  labels:
+    app: collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: collector
+  template:
+    metadata:
+      labels:
+        app: collector
+    spec:
+      serviceAccountName: collector-sa
+      nodeSelector:
+        kubernetes.io/hostname: k3s-worker-2
+      containers:
+        - name: collector
+          image: ghcr.io/mizaaah/collector:latest
+          imagePullPolicy: Always
+          env:
+            - name: LOKI_URL
+              value: "http://loki:3100/loki/api/v1/push"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
