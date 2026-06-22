@@ -1,4 +1,3 @@
-# déploiement loki
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -69,7 +68,6 @@ spec:
         - name: loki-data
           emptyDir: {}
 ---
-# configmap loki
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -81,6 +79,8 @@ data:
     server:
       http_listen_port: 3100
     ingester:
+      wal:
+        enabled: false
       lifecycler:
         ring:
           kvstore:
@@ -113,7 +113,6 @@ data:
       shared_store: filesystem
       retention_enabled: true
 ---
-# service Loki
 apiVersion: v1
 kind: Service
 metadata:
