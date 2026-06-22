@@ -16,6 +16,8 @@ spec:
         app: collector
     spec:
       serviceAccountName: collector-sa
+      imagePullSecrets:
+        - name: ghcr-secret
       nodeSelector:
         kubernetes.io/hostname: k3s-worker-2
       containers:
