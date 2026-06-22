@@ -2,11 +2,9 @@ FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
-# Mise à jour système + suppression Perl
+# Mise à jour système sans supprimer Perl (essentiel sur slim)
 RUN apt-get update && \
     apt-get upgrade -y && \
-    apt-get remove -y perl perl-base && \
-    apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 
 # Dépendances Python
