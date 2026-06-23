@@ -293,6 +293,35 @@ graph TD
 ```
 
 ---
+## 🐳 Containerisation Cowrie
+
+[ Dockerfile ]                  ← recette de construction
+
+FROM cowrie/cowrie:latest       image officielle Docker Hub
+
+EXPOSE 2222                     port d'écoute SSH
+[ cowrie.cfg ]                  ← configuration du honeypot
+
+hostname = server01             faux nom de serveur
+
+listen_endpoints = 0.0.0.0      écoute sur toutes les interfaces
+
+output_jsonlog = true           logs structurés en JSON
+[ docker run ]                  ← lancement
+
+-p 2222:2222                    exposition du port
+
+cowrie/cowrie:latest            image utilisée
+
+---
+
+## 🔧 Qualité de code
+
+[ pre-commit ]      hook git automatique avant chaque commit
+
+[ Black  ]          formatage Python — PEP8
+
+[ Flake8 ]          lint — bonnes pratiques
 
 ## 🔄 CI/CD — GitHub Actions
 
