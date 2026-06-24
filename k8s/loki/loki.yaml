@@ -78,6 +78,14 @@ data:
     auth_enabled: false
     server:
       http_listen_port: 3100
+      grpc_server_max_recv_msg_size: 33554432
+      grpc_server_max_send_msg_size: 33554432
+    query_scheduler:
+      max_outstanding_requests_per_tenant: 4096
+    frontend:
+      max_outstanding_per_tenant: 4096
+    query_range:
+      parallelise_shardable_queries: true
     ingester:
       wal:
         enabled: false
@@ -108,6 +116,8 @@ data:
       retention_period: 168h
       ingestion_rate_mb: 10
       ingestion_burst_size_mb: 20
+      split_queries_by_interval: 24h
+      max_query_parallelism: 16
     compactor:
       working_directory: /loki/compactor
       shared_store: filesystem
