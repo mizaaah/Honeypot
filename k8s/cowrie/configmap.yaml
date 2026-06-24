@@ -13,4 +13,4 @@ data:
 
     [output_jsonlog]
     enabled = true
-    logfile = var/log/cowrie/cowrie.json
+    logfile = /dev/stdout

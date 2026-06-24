@@ -31,7 +31,7 @@ spec:
             - containerPort: 2222
           volumeMounts:
             - name: cowrie-config
-              mountPath: /home/cowrie/cowrie/etc/cowrie.cfg
+              mountPath: /cowrie/cowrie-git/etc/cowrie.cfg
               subPath: cowrie.cfg
             - name: cowrie-logs
               mountPath: /home/cowrie/cowrie/var/log/cowrie
