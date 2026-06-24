@@ -1,3 +1,4 @@
+import os
 import time
 import json
 import requests
@@ -5,7 +6,7 @@ import threading
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
 
-LOKI_URL = "http://loki:3100/loki/api/v1/push"
+LOKI_URL = os.environ.get("LOKI_URL", "http://loki:3100/loki/api/v1/push")
 
 # --- Pour l'Alerting ---
 COMPTEUR_ATTAQUES = 0
@@ -87,7 +88,17 @@ def traiter_ligne(line, pod_name):
         # Enrichissement GeoIP
         ip_attaquant = log_data.get("src_ip")
         if ip_attaquant:
-            log_data["geoip"] = enrichir_geoip(ip_attaquant)
+            geo = enrichir_geoip(ip_attaquant)
+            log_data["geoip"] = geo
+            # Champs à plat pour que les requêtes LogQL du dashboard (| json | country / city ...) les trouvent
+            log_data["country"] = geo.get("pays")
+            log_data["city"] = geo.get("ville")
+            log_data["latitude"] = geo.get("latitude")
+            log_data["longitude"] = geo.get("longitude")
+
+        # Cowrie nomme la commande "input" ; le dashboard interroge le champ "command"
+        if log_data.get("input") is not None:
+            log_data["command"] = log_data["input"]
 
         id_evenement = log_data.get("eventid")
         log_data["alerte_seuil"] = False
@@ -117,16 +128,30 @@ def traiter_ligne(line, pod_name):
         pass  # Ignorer les lignes non-JSON (démarrage Cowrie, etc.)
 
 
-def stream_pod_logs(pod_name, namespace="honeypot"):
-    """Stream les logs d'un pod Cowrie"""
+def choisir_conteneur(pod):
+    """Choisit le conteneur qui émet les logs JSON Cowrie.
+
+    Les pods multi-conteneurs exposent le JSON via le sidecar 'log-shipper'
+    (le conteneur 'cowrie' n'émet que le log texte Twisted). Sur les pods
+    mono-conteneur, on lit directement 'cowrie'.
+    """
+    noms = [c.name for c in pod.spec.containers]
+    if "log-shipper" in noms:
+        return "log-shipper"
+    return "cowrie"
+
+
+def stream_pod_logs(pod_name, container, namespace="honeypot"):
+    """Stream les logs d'un pod Cowrie depuis le conteneur fourni"""
     v1 = client.CoreV1Api()
-    print(f"[*] Démarrage stream logs pour {pod_name}")
+    print(f"[*] Démarrage stream logs pour {pod_name} (conteneur: {container})")
 
     while True:
         try:
             logs = v1.read_namespaced_pod_log(
                 name=pod_name,
                 namespace=namespace,
+                container=container,  # Indispensable sur les pods multi-conteneurs
                 follow=True,
                 _preload_content=False,
                 tail_lines=0  # Ne lire que les nouveaux logs
@@ -137,6 +162,10 @@ def stream_pod_logs(pod_name, namespace="honeypot"):
                     traiter_ligne(line, pod_name)
 
         except ApiException as e:
+            # Pod supprimé (scale down, rollout) : on arrête ce thread proprement
+            if e.status == 404:
+                print(f"[*] Pod {pod_name} disparu, arrêt du stream")
+                return
             print(f"[-] Erreur API K8s pour {pod_name}: {e}")
             time.sleep(5)
         except Exception as e:
@@ -171,21 +200,21 @@ def collect_logs():
                 label_selector="app=cowrie"
             )
 
-            pods_actifs = [
-                pod.metadata.name
+            pods_actifs = {
+                pod.metadata.name: choisir_conteneur(pod)
                 for pod in pods.items
                 if pod.status.phase == "Running"
-            ]
+            }
 
             # Lancer un thread par pod non encore streamé
             pods_en_cours = [t.name for t in threads if t.is_alive()]
 
-            for pod_name in pods_actifs:
+            for pod_name, container in pods_actifs.items():
                 if pod_name not in pods_en_cours:
                     print(f"[+] Nouveau pod détecté : {pod_name}")
                     t = threading.Thread(
                         target=stream_pod_logs,
-                        args=(pod_name,),
+                        args=(pod_name, container),
                         name=pod_name,
                         daemon=True
                     )
