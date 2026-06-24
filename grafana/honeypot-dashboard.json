@@ -150,12 +150,12 @@
         "sortOrder": "Descending",
         "wrapLogMessage": true
       },
-      "title": "🔴 Flux des attaques en direct (IP · pays/ville · événement · identifiants · commande)",
+      "title": "🔴 Flux des attaques en direct (IP · ville/pays · action)",
       "type": "logs",
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki" },
-          "expr": "{job=\"cowrie\"} | json | line_format \"{{.src_ip}}  [{{.country}} {{.city}}]  {{.eventid}}  👤 {{.username}}:{{.password}}  $ {{.input}}\"",
+          "expr": "{job=\"cowrie\"} | json | eventid=~\"cowrie.login.success|cowrie.login.failed|cowrie.command.input|cowrie.session.connect\" | line_format \"{{.src_ip}}{{if .city}} [{{.city}}, {{.country}}]{{else if .country}} [{{.country}}]{{end}} | {{.message}}\"",
           "refId": "A"
         }
       ]
