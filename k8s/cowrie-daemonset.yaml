@@ -1,0 +1,13 @@
+containers:
+- name: cowrie
+  image: ghcr.io/mizaaah/cowrie:latest
+  volumeMounts:
+  - name: ssh-keys
+    mountPath: /home/cowrie/cowrie/var/lib/cowrie/keys
+    readOnly: true
+
+volumes:
+- name: ssh-keys
+  secret:
+    secretName: cowrie-ssh-keys
+    defaultMode: 0600
